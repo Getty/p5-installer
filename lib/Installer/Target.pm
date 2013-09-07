@@ -173,8 +173,11 @@ sub run {
   waitpid($pid, 0);
   my $status = $? >> 8;
   if ($status) {
-    print "Command exited with status $status\n\n";
     print $run_log;
+    print "\n";
+    print "     Command: ".join(" ",@args)."\n";
+    print "in Directory: ".$dir."\n";
+    print "exited with status $status\n\n";
     print "\n";
     die "Error on run ".$self->log_filename;
   }
