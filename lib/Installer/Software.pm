@@ -7,6 +7,7 @@ use JSON_File;
 use Path::Tiny;
 use File::chdir;
 use Archive::Extract;
+use namespace::autoclean;
 
 has target => (
   is => 'ro',
@@ -15,6 +16,7 @@ has target => (
 sub log_print { shift->target->log_print(@_) }
 sub run { shift->target->run(@_) }
 sub target_directory { shift->target->target->stringify }
+sub target_path { shift->target->target_path(@_) }
 
 has archive_url => (
   is => 'ro',
@@ -25,6 +27,20 @@ has archive => (
   is => 'ro',
   predicate => 1,
 );
+
+for (qw( custom_configure custom_test post_install export_sh )) {
+  has $_ => (
+    is => 'ro',
+    predicate => 1,
+  );
+}
+
+for (qw( with enable disable without )) {
+  has $_ => (
+    is => 'ro',
+    predicate => 1,
+  );
+}
 
 has alias => (
   is => 'ro',
@@ -95,28 +111,43 @@ sub unpack {
 sub unpack_path { path(shift->meta->{unpack},@_) }
 
 sub run_configure {
-  my ( $self ) = @_;
-  $self->run($self->unpack_path,'./configure','--prefix='.$self->target_directory);
-}
-
-sub run_capital_configure {
-  my ( $self ) = @_;
-  $self->run($self->unpack_path,'./Configure','-des','-Dprefix='.$self->target_directory);
+  my ( $self, @configure_args ) = @_;
+  if ($self->has_with) {
+    for my $key (keys %{$self->with}) {
+      my $value = $self->with->{$key};
+      if (defined $value && $value ne "") {
+        push @configure_args, '--with-'.$key.'='.$value;
+      } else {
+        push @configure_args, '--with-'.$key;
+      }
+    }
+  }
+  for my $func (qw( enable disable without )) {
+    my $has_func = 'has_'.$func;
+    if ($self->$has_func) {
+      for my $value (@{$self->$func}) {
+        push @configure_args, '--'.$func.'-'.$value;
+      }
+    }
+  }
+  $self->run($self->unpack_path,'./configure','--prefix='.$self->target_directory,@configure_args);
 }
 
 sub configure {
   my ( $self ) = @_;
   return if defined $self->meta->{configure};
   $self->log_print("Configuring ".$self->unpack_path." ...");
-  if ($self->unpack_path('autogen.sh')->exists) {
-    $self->run($self->unpack_path,'./autogen.sh');
-  }
-  if ($self->unpack_path('configure')->exists) {
-    $self->run_configure;
-  } elsif ($self->unpack_path('Configure')->exists) {
-    $self->run_capital_configure;
-  } elsif ($self->unpack_path('Makefile.PL')) {
-    $self->run($self->unpack_path,'perl','Makefile.PL');
+  if ($self->has_custom_configure) {
+    $self->custom_configure->($self);
+  } else {
+    if ($self->unpack_path('autogen.sh')->exists) {
+      $self->run($self->unpack_path,'./autogen.sh');
+    }
+    if ($self->unpack_path('configure')->exists) {
+      $self->run_configure;
+    } elsif ($self->unpack_path('Makefile.PL')) {
+      $self->run($self->unpack_path,'perl','Makefile.PL');
+    }
   }
   $self->meta->{configure} = 1;
 }
@@ -135,8 +166,12 @@ sub test {
   my ( $self ) = @_;
   return if defined $self->meta->{test};
   $self->log_print("Testing ".$self->unpack_path." ...");
-  if ($self->unpack_path('Makefile')->exists) {
-    $self->run($self->unpack_path,'make','test');
+  if ($self->has_custom_test) {
+    $self->custom_test->($self);
+  } else {
+    if ($self->unpack_path('Makefile')->exists) {
+      $self->run($self->unpack_path,'make','test');
+    }
   }
   $self->meta->{test} = 1;
 }

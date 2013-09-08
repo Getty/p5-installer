@@ -89,6 +89,10 @@ sub install_software {
   $self->meta->{software_packages_done} = [keys %{$self->software}];
   push @{$self->actions}, $software;
   $self->update_env;
+  if (!defined $software->meta->{post_install} && $software->has_post_install) {
+    $software->post_install->($software);
+    $software->meta->{post_install} = 1;
+  }
 }
 
 sub install_url {
@@ -117,9 +121,39 @@ sub install_perl {
     target => $self,
     archive_url => $src,
     testable => 1,
+    custom_configure => sub {
+      my ( $self ) = @_;
+      $self->run($self->unpack_path,'./Configure','-des','-Dprefix='.$self->target_directory);
+    },
+    post_install => sub {
+      my ( $self ) = @_;
+      $self->log_print("Installing App::cpanminus ...");
+      my $cpanm_filename = path($self->target->installer_dir,'cpanm')->stringify;
+      io($cpanm_filename)->print(io('http://cpanmin.us/')->get->content);
+      chmod(0755,$cpanm_filename);
+      $self->run(undef,$cpanm_filename,'-L',$self->target_path('perl5'),'App::cpanminus','local::lib');
+    },
+    export_sh => sub {
+      my ( $self ) = @_;
+      return 'eval $( perl -I'.$self->target_path('perl5','lib','perl5').' -Mlocal::lib='.$self->target_path('perl5').' )';
+    },
     %args,
   ));
-  CPAN::Shell->install('App::cpanminus');
+}
+
+sub install_cpanm {
+  my ( $self, @modules ) = @_;
+  $self->run(undef,'cpanm',@modules);
+}
+
+sub setup_env {
+  my ( $self ) = @_;
+  if (defined $self->meta->{PATH} && @{$self->meta->{PATH}}) {
+    $ENV{PATH} = (join(':',@{$self->meta->{PATH}})).':'.$ENV{PATH};
+  }
+  if (defined $self->meta->{LD_LIBRARY_PATH} && @{$self->meta->{LD_LIBRARY_PATH}}) {
+    $ENV{LD_LIBRARY_PATH} = (join(':',@{$self->meta->{LD_LIBRARY_PATH}})).(defined $ENV{LD_LIBRARY_PATH} ? ':'.$ENV{LD_LIBRARY_PATH} : '');
+  }
 }
 
 sub update_env {
@@ -160,11 +194,12 @@ sub custom_run {
 
 sub run {
   my ( $self, $dir, @args ) = @_;
+  $dir = $self->target_path unless $dir;
   local $CWD = "$dir";
   $self->log_print("Executing in $dir: ".join(" ",@args));
   $|=1;
   my $run_log = "";
-  my $pid = IPC::Open3::open3(my ($in, $out), undef, join(" ",@args));
+  my $pid = IPC::Open3::open3(my ( $in, $out ), undef, join(" ",@args));
   while(defined(my $line = <$out>)){
     $run_log .= $line;
     chomp($line);
@@ -211,6 +246,16 @@ sub write_export {
   if (defined $self->meta->{LD_LIBRARY_PATH} && @{$self->meta->{LD_LIBRARY_PATH}}) {
     $export_sh .= 'export LD_LIBRARY_PATH="'.join(':',@{$self->meta->{LD_LIBRARY_PATH}}).':$LD_LIBRARY_PATH"'."\n";
   }
+  $export_sh .= "\n";
+  for (@{$self->meta->{software_packages_done}}) {
+    my $software = $self->software->{$_};
+    if ($software->has_export_sh) {
+      my @lines = $software->export_sh->($software);
+      $export_sh .= "# export.sh addition by ".$software->alias."\n";
+      $export_sh .= join("\n",@lines)."\n\n";
+    }
+  }
+  $export_sh .= ("#" x 60)."\n";
   io($export_filename)->print($export_sh);
   chmod(0755,$export_filename);
 }
@@ -226,6 +271,7 @@ sub installation {
   $self->log_io->print(("#" x 80)."\nStarting new log ".(time)."\n".("#" x 80)."\n\n");
   $self->meta->{last_run} = time;
   $self->meta->{preinstall_ENV} = \%ENV;
+  $self->setup_env;
   $self->installer_code->($self);
   $self->write_export;
   $self->log_print("Done");
