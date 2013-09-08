@@ -61,7 +61,7 @@ options possible (so far):
     },
     export_sh => sub {
       return "# extra lines", "# for getting added to", "# export.sh";
-    },
+    };
 
 Same options can go towards a local file:
 
