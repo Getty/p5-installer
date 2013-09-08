@@ -83,4 +83,12 @@ B<Be careful!> It doesn't care if you have installed a perl in the target
 directory or not, and just fire up cpanm, so it would install on your local
 perl installation, if you don't install perl before.
 
+Or install packages via pip:
+
+  pip qw( rtree imposm );
+
+B<Be careful!> It doesn't care if you have installed pip in the target
+directory or not, and just fire up pip, so it would install on your local
+python environment, if you don't installed pip before.
+
 =cut

@@ -146,6 +146,13 @@ sub install_cpanm {
   $self->run(undef,'cpanm',@modules);
 }
 
+sub install_pip {
+  my ( $self, @modules ) = @_;
+  for (@modules) {
+    $self->run(undef,'pip','install',$_);    
+  }
+}
+
 sub setup_env {
   my ( $self ) = @_;
   if (defined $self->meta->{PATH} && @{$self->meta->{PATH}}) {

@@ -25,6 +25,8 @@ sub BUILD {
   $target = path($target)->absolute->stringify;
   my $installer_code = io($self->file_path)->all;
   my $target_class = 'App::Installer::Sandbox'.$$;
+
+  my ( $err );
   {
     local $@;
     eval <<EVAL;
@@ -38,7 +40,11 @@ install_to '$target' => sub {
 };
 
 EVAL
+    $err = $@;
   }
+
+  if ($err) { die "$err" };
+
 }
 
 1;

@@ -16,6 +16,7 @@ our @EXPORT = qw(
   file
   perl
   cpanm
+  pip
 
 );
 
@@ -46,6 +47,11 @@ sub file {
 sub perl {
   die "Not inside installation" unless defined $Installer::Target::current;
   $Installer::Target::current->install_perl(@_);
+}
+
+sub pip {
+  die "Not inside installation" unless defined $Installer::Target::current;
+  $Installer::Target::current->install_pip(@_);
 }
 
 sub cpanm {
