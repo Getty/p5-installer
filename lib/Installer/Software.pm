@@ -85,12 +85,17 @@ sub installation {
 sub fetch {
   my ( $self ) = @_;
   return if defined $self->meta->{fetch};
-  my $sio = io($self->archive_url);
-  my $filename = (split('/',$sio->uri->path))[-1];
-  $self->log_print("Downloading ".$self->archive_url." as ".$filename." ...");
-  my $full_filename = path($self->target->src_dir,$filename)->stringify;
-  io($full_filename)->print(io($self->archive_url)->get->content);
-  $self->meta->{fetch} = $full_filename;
+  if ($self->has_archive_url) {
+    my $sio = io($self->archive_url);
+    my $filename = (split('/',$sio->uri->path))[-1];
+    $self->log_print("Downloading ".$self->archive_url." as ".$filename." ...");
+    my $full_filename = path($self->target->src_dir,$filename)->stringify;
+    io($full_filename)->print(io($self->archive_url)->get->content);
+    $self->meta->{fetch} = $full_filename;
+  } elsif ($self->has_archive) {
+    $self->meta->{fetch} = path($self->archive)->absolute->stringify;
+  }
+  die "Unable to get an archive for unpacking for this software" unless defined $self->meta->{fetch};
 }
 sub fetch_path { path(shift->meta->{fetch}) }
 
