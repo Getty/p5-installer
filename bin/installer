@@ -30,4 +30,57 @@ Sample .installer file might look like
   url "http://download.osgeo.org/postgis/source/postgis-2.1.0.tar.gz";
   cpanm "DBD::Pg";
 
+=head1 DESCRIPTION
+
+Bigger example for installer file options:
+
+  url "http://host/file.tar.gz",
+    with => {
+      key => "value",
+      other_key => undef,
+    },
+    enable => [qw( satan )],
+    disable => [qw( god )],
+    without => [qw( religion )],
+    testable => 1;
+
+Would endup with the following parameter on I<./configure>: B<--with-key=value
+--with-other_key --enable-satan --disable-god --without-religion>. Also it
+would run "make test" if there is a Makefile after configuration. Another
+options possible (so far):
+
+  url "http://host/file.tar.gz",
+    custom_test => sub {
+      $_[0]->run($_[0]->unpack_path,'testcommand','--args')
+    },
+    custom_configure => sub {
+      $self->run($self->unpack_path,'./Configure','-des','-Dprefix='.$self->target_directory);
+    },
+    post_install => sub {
+      $self->run(undef,'command'); # run in target directory after install
+    },
+    export_sh => sub {
+      return "# extra lines", "# for getting added to", "# export.sh";
+    },
+
+Same options can go towards a local file:
+
+  file "/some/local/file.tar.gz";
+
+You can also run a custom command (it will be run inside the target directory):
+
+  run "custom_command", "args", "args";
+
+Install specific perl (so far no options):
+
+  perl "5.8.8";
+
+Or install packages via cpanm:
+
+  cpanm qw( Yeb Dist::Zilla );
+
+B<Be careful!> It doesn't care if you have installed a perl in the target
+directory or not, and just fire up cpanm, so it would install on your local
+perl installation, if you don't install perl before.
+
 =cut

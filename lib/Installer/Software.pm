@@ -69,7 +69,7 @@ has meta => (
 has testable => (
   is => 'ro',
   lazy => 1,
-  default => sub { 0 },
+  default => sub { $_[0]->has_custom_test ? 1 : 0 },
 );
 
 sub installation {
