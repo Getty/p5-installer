@@ -163,7 +163,7 @@ sub compile {
   my ( $self ) = @_;
   return if defined $self->meta->{compile};
   $self->log_print("Compiling ".$self->unpack_path." ...");
-  if ($self->unpack_path('setup.py')->exists) {
+  if ($self->unpack_path('setup.py')->exists and !$self->unpack_path('configure')->exists) {
     $self->run($self->unpack_path,'python','setup.py','build');
   } elsif ($self->unpack_path('Makefile')->exists) {
     $self->run($self->unpack_path,'make');
@@ -189,7 +189,7 @@ sub install {
   my ( $self ) = @_;
   return if defined $self->meta->{install};
   $self->log_print("Installing ".$self->unpack_path." ...");
-  if ($self->unpack_path('setup.py')->exists) {
+  if ($self->unpack_path('setup.py')->exists and !$self->unpack_path('configure')->exists) {
     $self->run($self->unpack_path,'python','setup.py','install');
   } elsif ($self->unpack_path('Makefile')->exists) {
     $self->run($self->unpack_path,'make','install');

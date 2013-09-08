@@ -191,7 +191,7 @@ sub update_env {
   $self->meta->{seen_dirs} = \%seen;
 }
 
-sub custom_run {
+sub install_run {
   my ( $self, @args ) = @_;
   $self->run($self->target,@args);
   push @{$self->actions}, {
@@ -268,7 +268,8 @@ sub write_export {
 }
 
 our $current;
-sub installation {
+
+sub prepare_installation {
   my ( $self ) = @_;
   die "Target directory is a file" if $self->target->is_file;
   $current = $self;
@@ -279,12 +280,22 @@ sub installation {
   $self->meta->{last_run} = time;
   $self->meta->{preinstall_ENV} = \%ENV;
   $self->setup_env;
-  $self->installer_code->($self);
+}
+
+sub finish_installation {
+  my ( $self ) = @_;
   $self->write_export;
   $self->log_print("Done");
   %ENV = %{$self->meta->{preinstall_ENV}};
   delete $self->meta->{preinstall_ENV};
   $current = undef;
+}
+
+sub installation {
+  my ( $self ) = @_;
+  $self->prepare_installation;
+  $self->installer_code->($self);
+  $self->finish_installation;
 }
 
 1;

@@ -53,4 +53,4 @@ EVAL
 
 =head1 DESCRIPTION
 
-See L<installer> for more information
+See L<installer> and for more information

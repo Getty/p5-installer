@@ -32,6 +32,8 @@ Sample .installer file might look like
 
 =head1 DESCRIPTION
 
+B<TOTALLY BETA, PLEASE TEST :D>
+
 Bigger example for installer file options:
 
   url "http://host/file.tar.gz",
