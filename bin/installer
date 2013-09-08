@@ -30,6 +30,10 @@ Sample .installer file might look like
   url "http://download.osgeo.org/postgis/source/postgis-2.1.0.tar.gz";
   cpanm "DBD::Pg";
 
+The .installer file can also be fetched by URL:
+
+  installer -u http://stardestroyer.de/postgis.installer ~/postgistest
+
 =head1 DESCRIPTION
 
 B<TOTALLY BETA, PLEASE TEST :D>
