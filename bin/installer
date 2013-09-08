@@ -10,11 +10,14 @@ App::Installer->new_with_options;
 
 =head1 SYNOPSIS
 
-  # Will use .installer file in local directory
+  # Will use .installer file in current directory
   installer ~/myprojectenv
 
   # Using a specific installer file
-  installer --file=/other/installer_file ~/myprojectenv
+  installer -f /other/installer_file ~/myprojectenv
+
+  # The .installer file can also be fetched by URL:
+  installer -u http://stardestroyer.de/postgis.installer ~/myprojectenv
 
   # On shell do the following for using the environment after installation
   . ~/myprojectenv/export.sh
@@ -29,10 +32,6 @@ Sample .installer file might look like
   url "http://download.osgeo.org/geos/geos-3.4.2.tar.bz2";
   url "http://download.osgeo.org/postgis/source/postgis-2.1.0.tar.gz";
   cpanm "DBD::Pg";
-
-The .installer file can also be fetched by URL:
-
-  installer -u http://stardestroyer.de/postgis.installer ~/postgistest
 
 =head1 DESCRIPTION
 

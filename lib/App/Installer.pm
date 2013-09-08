@@ -9,6 +9,7 @@ use IO::All;
 option 'file' => (
   is => 'ro',
   format => 's',
+  short => 'f',
   lazy => 1,
   default => sub { '.installer' },
 );
