@@ -100,3 +100,4 @@ See L<installer> for more information.
 
 B<TOTALLY BETA, PLEASE TEST :D>
 
+=cut

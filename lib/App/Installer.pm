@@ -27,12 +27,6 @@ has 'url' => (
   predicate => 1,
 );
 
-has file_path => (
-  is => 'ro',
-  lazy => 1,
-  default => sub { file($_[0]->file)->absolute->stringify },
-);
-
 sub install_to_target {
   my ( $self ) = @_;
   my $target = $self->target;
@@ -43,7 +37,7 @@ sub install_to_target {
   } elsif ($self->has_url) {
     $installer_code = io($self->url)->get->content;
   } else {
-    $installer_code = io($self->file_path)->all;
+    $installer_code = io($self->file)->all;
   }
   my $target_class = 'App::Installer::Sandbox'.$$;
 
@@ -75,3 +69,5 @@ EVAL
 =head1 DESCRIPTION
 
 See L<installer> and for more information
+
+=cut

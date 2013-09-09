@@ -2,3 +2,4 @@ Installer-*
 .build
 fatlib
 index.txt
+fatpacker.trace

@@ -6,6 +6,8 @@ use strict;
 use warnings;
 use Getopt::Long;
 use App::Installer;
+use Installer::Target;
+use Installer::Software;
 
 my ( $url, $file, $installer_code );
 
@@ -120,5 +122,3 @@ Or install packages via pip:
 B<Be careful!> It doesn't care if you have installed pip in the target
 directory or not, and just fire up pip, so it would install on your local
 python environment, if you don't installed pip before.
-
-=cut

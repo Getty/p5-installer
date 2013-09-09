@@ -3,6 +3,7 @@ package Installer::Software;
 
 use Moo;
 use IO::All;
+use IO::All::LWP;
 use JSON_File;
 use Path::Class;
 use File::chdir;
