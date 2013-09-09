@@ -4,9 +4,26 @@
 
 use strict;
 use warnings;
+use Getopt::Long;
 use App::Installer;
 
-App::Installer->new_with_options;
+my ( $url, $file );
+
+GetOptions(
+  "u=s" => \$url,
+  "f=s" => \$file,
+);
+
+my $target = shift @ARGV;
+
+die "You can't give file and url at once" if defined $url and defined $file;
+die "Need a target to deploy to" unless $target;
+
+App::Installer->new(
+  target => $target,
+  defined $url ? ( url => $url ) : (),
+  defined $file ? ( file => $file ) : (),
+)->install_to_target;
 
 =head1 SYNOPSIS
 

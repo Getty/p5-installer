@@ -4,10 +4,10 @@ package Installer::Software;
 use Moo;
 use IO::All;
 use JSON_File;
-use Path::Tiny;
+use Path::Class;
 use File::chdir;
 use Archive::Extract;
-use namespace::autoclean;
+use namespace::clean;
 
 has target => (
   is => 'ro',
@@ -17,6 +17,7 @@ sub log_print { shift->target->log_print(@_) }
 sub run { shift->target->run(@_) }
 sub target_directory { shift->target->target->stringify }
 sub target_path { shift->target->target_path(@_) }
+sub target_file { shift->target->target_file(@_) }
 
 has archive_url => (
   is => 'ro',
@@ -61,7 +62,7 @@ has meta => (
   lazy => 1,
   default => sub {
     my ( $self ) = @_;
-    tie(my %meta,'JSON_File',path($self->target->installer_dir,$_[0]->alias.'.json')->stringify,, pretty => 1 );
+    tie(my %meta,'JSON_File',file($self->target->installer_dir,$_[0]->alias.'.json')->stringify,, pretty => 1 );
     return \%meta;
   },
 );
@@ -89,15 +90,15 @@ sub fetch {
     my $sio = io($self->archive_url);
     my $filename = (split('/',$sio->uri->path))[-1];
     $self->log_print("Downloading ".$self->archive_url." as ".$filename." ...");
-    my $full_filename = path($self->target->src_dir,$filename)->stringify;
+    my $full_filename = file($self->target->src_dir,$filename)->stringify;
     io($full_filename)->print(io($self->archive_url)->get->content);
     $self->meta->{fetch} = $full_filename;
   } elsif ($self->has_archive) {
-    $self->meta->{fetch} = path($self->archive)->absolute->stringify;
+    $self->meta->{fetch} = file($self->archive)->absolute->stringify;
   }
   die "Unable to get an archive for unpacking for this software" unless defined $self->meta->{fetch};
 }
-sub fetch_path { path(shift->meta->{fetch}) }
+sub fetch_path { file(shift->meta->{fetch}) }
 
 sub unpack {
   my ( $self ) = @_;
@@ -109,11 +110,12 @@ sub unpack {
   for (@{$archive->files}) {
     $self->target->log($_);
   }
-  my $src_path = $archive->extract_path;
+  my $src_path = dir($archive->extract_path)->absolute->stringify;
   $self->log_print("Extracted to ".$src_path." ...");
   $self->meta->{unpack} = $src_path;
 }
-sub unpack_path { path(shift->meta->{unpack},@_) }
+sub unpack_path { dir(shift->meta->{unpack},@_) }
+sub unpack_file { file(shift->meta->{unpack},@_) }
 
 sub run_configure {
   my ( $self, @configure_args ) = @_;
@@ -145,14 +147,14 @@ sub configure {
   if ($self->has_custom_configure) {
     $self->custom_configure->($self);
   } else {
-    if ($self->unpack_path('autogen.sh')->exists) {
+    if (-f $self->unpack_file('autogen.sh')) {
       $self->run($self->unpack_path,'./autogen.sh');
     }
-    if ($self->unpack_path('configure')->exists) {
+    if (-f $self->unpack_file('configure')) {
       $self->run_configure;
-    } elsif ($self->unpack_path('setup.py')->exists) {
+    } elsif (-f $self->unpack_path('setup.py')) {
       # no configure
-    } elsif ($self->unpack_path('Makefile.PL')) {
+    } elsif ($self->unpack_file('Makefile.PL')) {
       $self->run($self->unpack_path,'perl','Makefile.PL');
     }
   }
@@ -163,9 +165,9 @@ sub compile {
   my ( $self ) = @_;
   return if defined $self->meta->{compile};
   $self->log_print("Compiling ".$self->unpack_path." ...");
-  if ($self->unpack_path('setup.py')->exists and !$self->unpack_path('configure')->exists) {
+  if (-f $self->unpack_file('setup.py') and !-f $self->unpack_file('configure')) {
     $self->run($self->unpack_path,'python','setup.py','build');
-  } elsif ($self->unpack_path('Makefile')->exists) {
+  } elsif (-f $self->unpack_file('Makefile')) {
     $self->run($self->unpack_path,'make');
   }
   $self->meta->{compile} = 1;
@@ -178,7 +180,7 @@ sub test {
   if ($self->has_custom_test) {
     $self->custom_test->($self);
   } else {
-    if ($self->unpack_path('Makefile')->exists) {
+    if (-f $self->unpack_file('Makefile')) {
       $self->run($self->unpack_path,'make','test');
     }
   }
@@ -189,9 +191,9 @@ sub install {
   my ( $self ) = @_;
   return if defined $self->meta->{install};
   $self->log_print("Installing ".$self->unpack_path." ...");
-  if ($self->unpack_path('setup.py')->exists and !$self->unpack_path('configure')->exists) {
+  if (-f $self->unpack_file('setup.py') and !-f $self->unpack_file('configure')) {
     $self->run($self->unpack_path,'python','setup.py','install');
-  } elsif ($self->unpack_path('Makefile')->exists) {
+  } elsif (-f $self->unpack_file('Makefile')) {
     $self->run($self->unpack_path,'make','install');
   }
   $self->meta->{install} = 1;

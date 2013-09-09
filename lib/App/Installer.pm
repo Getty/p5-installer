@@ -2,36 +2,36 @@ package App::Installer;
 # ABSTRACT: Application class for Installer
 
 use Moo;
-use MooX::Options protect_argv => 0;
-use Path::Tiny;
+use Path::Class;
 use IO::All;
+use namespace::clean;
 
-option 'file' => (
+has 'target' => (
   is => 'ro',
-  format => 's',
-  short => 'f',
+  required => 1,
+);
+
+has 'file' => (
+  is => 'ro',
   lazy => 1,
   default => sub { '.installer' },
 );
 
-option 'url' => (
+has 'url' => (
   is => 'ro',
-  format => 's',
-  short => 'u',
   predicate => 1,
 );
 
 has file_path => (
   is => 'ro',
   lazy => 1,
-  default => sub { path($_[0]->file)->absolute->stringify },
+  default => sub { file($_[0]->file)->absolute->stringify },
 );
 
-sub BUILD {
+sub install_to_target {
   my ( $self ) = @_;
-  my $target = shift @ARGV;
-  die "Need a target to deploy to" unless $target;
-  $target = path($target)->absolute->stringify;
+  my $target = $self->target;
+  $target = dir($target)->absolute->stringify;
   my $installer_code;
   if ($self->has_url) {
     $installer_code = io($self->url)->get->content;

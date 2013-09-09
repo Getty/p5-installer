@@ -2,7 +2,6 @@ package Installer::Target;
 # ABSTRACT: Currently running project
 
 use Moo;
-use Path::Tiny;
 use IO::All;
 use IPC::Open3 ();
 use Installer::Software;
@@ -10,6 +9,8 @@ use JSON_File;
 use File::chdir;
 use CPAN::Perl::Releases qw[perl_tarballs];
 use CPAN;
+use Path::Class;
+use namespace::clean;
 
 has output_code => (
   is => 'ro',
@@ -32,14 +33,15 @@ has target_directory => (
 has target => (
   is => 'ro',
   lazy => 1,
-  default => sub { path($_[0]->target_directory)->absolute },
+  default => sub { dir($_[0]->target_directory)->absolute },
 );
-sub target_path { path(shift->target,@_) }
+sub target_path { dir(shift->target,@_) }
+sub target_file { file(shift->target,@_) }
 
 has installer_dir => (
   is => 'ro',
   lazy => 1,
-  default => sub { path($_[0]->target,'installer')->absolute },
+  default => sub { dir($_[0]->target,'installer') },
 );
 
 has software => (
@@ -57,13 +59,13 @@ has actions => (
 has src_dir => (
   is => 'ro',
   lazy => 1,
-  default => sub { path($_[0]->target,'src')->absolute },
+  default => sub { dir($_[0]->target,'src') },
 );
 
 has log_filename => (
   is => 'ro',
   lazy => 1,
-  default => sub { path($_[0]->installer_dir,'build.'.(time).'.log')->absolute->stringify },
+  default => sub { file($_[0]->installer_dir,'build.'.(time).'.log') },
 );
 
 has log_io => (
@@ -77,7 +79,7 @@ has meta => (
   lazy => 1,
   default => sub {
     my ( $self ) = @_;
-    tie(my %meta,'JSON_File',path($self->installer_dir,'meta.json')->stringify, pretty => 1);
+    tie(my %meta,'JSON_File',file($self->installer_dir,'meta.json')->absolute->stringify, pretty => 1);
     return \%meta;
   },
 );
@@ -108,7 +110,7 @@ sub install_file {
   my ( $self, $file, %args ) = @_;
   $self->install_software(Installer::Software->new(
     target => $self,
-    archive => path($file)->absolute->stringify,
+    archive => rel2abs(catfile($file)),
     %args,
   ));
 }
@@ -128,10 +130,14 @@ sub install_perl {
     post_install => sub {
       my ( $self ) = @_;
       $self->log_print("Installing App::cpanminus ...");
-      my $cpanm_filename = path($self->target->installer_dir,'cpanm')->stringify;
+      my $cpanm_filename = file($self->target->installer_dir,'cpanm');
       io($cpanm_filename)->print(io('http://cpanmin.us/')->get->content);
       chmod(0755,$cpanm_filename);
-      $self->run(undef,$cpanm_filename,'-L',$self->target_path('perl5'),'App::cpanminus','local::lib');
+      $self->run(undef,$cpanm_filename,'-L',$self->target_path('perl5'),qw(
+        App::cpanminus
+        local::lib
+        Module::CPANfile
+      ));
     },
     export_sh => sub {
       my ( $self ) = @_;
@@ -168,7 +174,7 @@ sub update_env {
   my %seen = defined $self->meta->{seen_dirs}
     ? %{$self->meta->{seen_dirs}}
     : ();
-  if (!$seen{'bin'} && $self->target_path('bin')->exists) {
+  if (!$seen{'bin'} and -e $self->target_path('bin')) {
     my @bindirs = defined $self->meta->{PATH}
       ? @{$self->meta->{PATH}}
       : ();
@@ -178,7 +184,7 @@ sub update_env {
     $ENV{PATH} = $bindir.':'.$ENV{PATH};
     $seen{'bin'} = 1;
   }
-  if (!$seen{'lib'} && $self->target_path('lib')->exists) {
+  if (!$seen{'lib'} and -e $self->target_path('lib')) {
     my @libdirs = defined $self->meta->{LD_LIBRARY_PATH}
       ? @{$self->meta->{LD_LIBRARY_PATH}}
       : ();
@@ -244,7 +250,7 @@ sub log_print {
 
 sub write_export {
   my ( $self ) = @_;
-  my $export_filename = path($self->target,'export.sh')->stringify;
+  my $export_filename = $self->target_file('export.sh');
   $self->log_print("Generating ".$export_filename." ...");
   my $export_sh = "#!/bin/sh\n#\n# Installer auto generated export.sh\n#\n".("#" x 60)."\n\n";
   if (defined $self->meta->{PATH} && @{$self->meta->{PATH}}) {
@@ -271,11 +277,11 @@ our $current;
 
 sub prepare_installation {
   my ( $self ) = @_;
-  die "Target directory is a file" if $self->target->is_file;
+  die "Target directory is a file" if -f $self->target;
   $current = $self;
-  $self->target->mkpath unless $self->target->exists;
-  $self->installer_dir->mkpath unless $self->installer_dir->exists;
-  $self->src_dir->mkpath unless $self->src_dir->exists;
+  $self->target->mkpath unless -d $self->target;
+  $self->installer_dir->mkpath unless -d $self->installer_dir;
+  $self->src_dir->mkpath unless -d $self->src_dir;
   $self->log_io->print(("#" x 80)."\nStarting new log ".(time)."\n".("#" x 80)."\n\n");
   $self->meta->{last_run} = time;
   $self->meta->{preinstall_ENV} = \%ENV;
