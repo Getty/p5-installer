@@ -1,5 +1,5 @@
 #!/usr/bin/env perl
-# PODNAME: installer
+# PODNAME: installto
 # ABSTRACT: Install an .installer configuration file
 
 use strict;
@@ -35,16 +35,16 @@ App::Installer->new(
   curl -s -L http://installer.pm | perl - ~/myprojectenv
 
   # Will use .installer file in current directory
-  installer ~/myprojectenv
+  installto ~/myprojectenv
 
   # Using a specific installer file
-  installer -f /other/installer_file ~/myprojectenv
+  installto -f /other/installer_file ~/myprojectenv
 
   # The .installer file can also be fetched by URL:
-  installer -u http://stardestroyer.de/postgis.installer ~/myprojectenv
+  installto -u http://stardestroyer.de/postgis.installer ~/myprojectenv
 
   # Giving installer code as string
-  installer -e "perl '5.18.1'; cpanm 'Plack';" ~/myprojectenv
+  installto -e "perl '5.18.1'; cpanm 'Plack';" ~/myprojectenv
 
   # On shell do the following for using the environment after installation
   . ~/myprojectenv/export.sh
