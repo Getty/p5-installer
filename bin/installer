@@ -27,6 +27,9 @@ App::Installer->new(
 
 =head1 SYNOPSIS
 
+  # Directly usable without install via http://installer.pm
+  curl -s -L http://installer.pm | perl - ~/myprojectenv
+
   # Will use .installer file in current directory
   installer ~/myprojectenv
 
