@@ -7,11 +7,12 @@ use warnings;
 use Getopt::Long;
 use App::Installer;
 
-my ( $url, $file );
+my ( $url, $file, $installer_code );
 
 GetOptions(
   "u=s" => \$url,
   "f=s" => \$file,
+  "e=s" => \$installer_code,
 );
 
 my $target = shift @ARGV;
@@ -23,6 +24,7 @@ App::Installer->new(
   target => $target,
   defined $url ? ( url => $url ) : (),
   defined $file ? ( file => $file ) : (),
+  defined $installer_code ? ( installer_code => $installer_code ) : (),
 )->install_to_target;
 
 =head1 SYNOPSIS
@@ -38,6 +40,9 @@ App::Installer->new(
 
   # The .installer file can also be fetched by URL:
   installer -u http://stardestroyer.de/postgis.installer ~/myprojectenv
+
+  # Giving installer code as string
+  installer -e "perl '5.18.1'; cpanm 'Plack';" ~/myprojectenv
 
   # On shell do the following for using the environment after installation
   . ~/myprojectenv/export.sh

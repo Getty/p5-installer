@@ -6,15 +6,20 @@ use Path::Class;
 use IO::All;
 use namespace::clean;
 
-has 'target' => (
+has target => (
   is => 'ro',
   required => 1,
 );
 
-has 'file' => (
+has file => (
   is => 'ro',
   lazy => 1,
   default => sub { '.installer' },
+);
+
+has installer_code => (
+  is => 'ro',
+  predicate => 1,
 );
 
 has 'url' => (
@@ -33,7 +38,9 @@ sub install_to_target {
   my $target = $self->target;
   $target = dir($target)->absolute->stringify;
   my $installer_code;
-  if ($self->has_url) {
+  if ($self->has_installer_code) {
+    $installer_code = $self->installer_code;
+  } elsif ($self->has_url) {
     $installer_code = io($self->url)->get->content;
   } else {
     $installer_code = io($self->file_path)->all;
