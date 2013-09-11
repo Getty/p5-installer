@@ -91,6 +91,7 @@ sub install_software {
   $self->meta->{software_packages_done} = [keys %{$self->software}];
   push @{$self->actions}, $software;
   $self->update_env;
+  $self->write_export;
   if (!defined $software->meta->{post_install} && $software->has_post_install) {
     $software->post_install->($software);
     $software->meta->{post_install} = 1;
@@ -159,44 +160,6 @@ sub install_pip {
   }
 }
 
-sub setup_env {
-  my ( $self ) = @_;
-  if (defined $self->meta->{PATH} && @{$self->meta->{PATH}}) {
-    $ENV{PATH} = (join(':',@{$self->meta->{PATH}})).':'.$ENV{PATH};
-  }
-  if (defined $self->meta->{LD_LIBRARY_PATH} && @{$self->meta->{LD_LIBRARY_PATH}}) {
-    $ENV{LD_LIBRARY_PATH} = (join(':',@{$self->meta->{LD_LIBRARY_PATH}})).(defined $ENV{LD_LIBRARY_PATH} ? ':'.$ENV{LD_LIBRARY_PATH} : '');
-  }
-}
-
-sub update_env {
-  my ( $self ) = @_;
-  my %seen = defined $self->meta->{seen_dirs}
-    ? %{$self->meta->{seen_dirs}}
-    : ();
-  if (!$seen{'bin'} and -e $self->target_path('bin')) {
-    my @bindirs = defined $self->meta->{PATH}
-      ? @{$self->meta->{PATH}}
-      : ();
-    my $bindir = $self->target_path('bin')->absolute->stringify;
-    push @bindirs, $bindir;
-    $self->meta->{PATH} = \@bindirs;
-    $ENV{PATH} = $bindir.':'.$ENV{PATH};
-    $seen{'bin'} = 1;
-  }
-  if (!$seen{'lib'} and -e $self->target_path('lib')) {
-    my @libdirs = defined $self->meta->{LD_LIBRARY_PATH}
-      ? @{$self->meta->{LD_LIBRARY_PATH}}
-      : ();
-    my $libdir = $self->target_path('lib')->absolute->stringify;
-    push @libdirs, $libdir;
-    $self->meta->{LD_LIBRARY_PATH} = \@libdirs;
-    $ENV{LD_LIBRARY_PATH} = $libdir.(defined $ENV{LD_LIBRARY_PATH} ? ':'.$ENV{LD_LIBRARY_PATH} : '');
-    $seen{'lib'} = 1;
-  }
-  $self->meta->{seen_dirs} = \%seen;
-}
-
 sub install_run {
   my ( $self, @args ) = @_;
   $self->run($self->target,@args);
@@ -212,7 +175,19 @@ sub run {
   $self->log_print("Executing in $dir: ".join(" ",@args));
   $|=1;
   my $run_log = "";
-  my $pid = IPC::Open3::open3(my ( $in, $out ), undef, join(" ",@args));
+  my $export_sh_filename = $self->target_file('export.sh')->absolute->stringify;
+  if (-f $export_sh_filename) {
+    my @export_sh_lines = io($export_sh_filename)->slurp;
+    for my $line (@export_sh_lines) {
+      $run_log .= $line;
+      chomp($line);
+      $self->log($line);
+    }
+    unshift @args, ".", $export_sh_filename, "\n";
+  }
+  my $pid = IPC::Open3::open3(my ( $in, $out ), undef, "/bin/sh -s");
+  print $in join(" ",@args)."";
+  close ($in);
   while(defined(my $line = <$out>)){
     $run_log .= $line;
     chomp($line);
@@ -248,6 +223,35 @@ sub log_print {
   $self->output_code->(@line);
 }
 
+our $current;
+
+sub prepare_installation {
+  my ( $self ) = @_;
+  die "Target directory is a file" if -f $self->target;
+  $current = $self;
+  $self->target->mkpath unless -d $self->target;
+  $self->installer_dir->mkpath unless -d $self->installer_dir;
+  $self->src_dir->mkpath unless -d $self->src_dir;
+  $self->log_io->print(("#" x 80)."\nStarting new log ".(time)."\n".("#" x 80)."\n\n");
+  $self->meta->{last_run} = time;
+  $self->meta->{preinstall_ENV} = \%ENV;
+}
+
+sub finish_installation {
+  my ( $self ) = @_;
+  $self->log_print("Done");
+  %ENV = %{$self->meta->{preinstall_ENV}};
+  delete $self->meta->{preinstall_ENV};
+  $current = undef;
+}
+
+sub installation {
+  my ( $self ) = @_;
+  $self->prepare_installation;
+  $self->installer_code->($self);
+  $self->finish_installation;
+}
+
 sub write_export {
   my ( $self ) = @_;
   my $export_filename = $self->target_file('export.sh');
@@ -273,35 +277,32 @@ sub write_export {
   chmod(0755,$export_filename);
 }
 
-our $current;
-
-sub prepare_installation {
+sub update_env {
   my ( $self ) = @_;
-  die "Target directory is a file" if -f $self->target;
-  $current = $self;
-  $self->target->mkpath unless -d $self->target;
-  $self->installer_dir->mkpath unless -d $self->installer_dir;
-  $self->src_dir->mkpath unless -d $self->src_dir;
-  $self->log_io->print(("#" x 80)."\nStarting new log ".(time)."\n".("#" x 80)."\n\n");
-  $self->meta->{last_run} = time;
-  $self->meta->{preinstall_ENV} = \%ENV;
-  $self->setup_env;
-}
-
-sub finish_installation {
-  my ( $self ) = @_;
-  $self->write_export;
-  $self->log_print("Done");
-  %ENV = %{$self->meta->{preinstall_ENV}};
-  delete $self->meta->{preinstall_ENV};
-  $current = undef;
-}
-
-sub installation {
-  my ( $self ) = @_;
-  $self->prepare_installation;
-  $self->installer_code->($self);
-  $self->finish_installation;
+  my %seen = defined $self->meta->{seen_dirs}
+    ? %{$self->meta->{seen_dirs}}
+    : ();
+  if (!$seen{'bin'} and -e $self->target_path('bin')) {
+    my @bindirs = defined $self->meta->{PATH}
+      ? @{$self->meta->{PATH}}
+      : ();
+    my $bindir = $self->target_path('bin')->absolute->stringify;
+    push @bindirs, $bindir;
+    $self->meta->{PATH} = \@bindirs;
+    $ENV{PATH} = $bindir.':'.$ENV{PATH};
+    $seen{'bin'} = 1;
+  }
+  if (!$seen{'lib'} and -e $self->target_path('lib')) {
+    my @libdirs = defined $self->meta->{LD_LIBRARY_PATH}
+      ? @{$self->meta->{LD_LIBRARY_PATH}}
+      : ();
+    my $libdir = $self->target_path('lib')->absolute->stringify;
+    push @libdirs, $libdir;
+    $self->meta->{LD_LIBRARY_PATH} = \@libdirs;
+    $ENV{LD_LIBRARY_PATH} = $libdir.(defined $ENV{LD_LIBRARY_PATH} ? ':'.$ENV{LD_LIBRARY_PATH} : '');
+    $seen{'lib'} = 1;
+  }
+  $self->meta->{seen_dirs} = \%seen;
 }
 
 1;
