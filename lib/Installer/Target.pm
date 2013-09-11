@@ -257,6 +257,7 @@ sub write_export {
   my $export_filename = $self->target_file('export.sh');
   $self->log_print("Generating ".$export_filename." ...");
   my $export_sh = "#!/bin/sh\n#\n# Installer auto generated export.sh\n#\n".("#" x 60)."\n\n";
+  $export_sh .= 'export CURRENT_INSTALLER_ENV='.$self->target_path->stringify."\n";
   if (defined $self->meta->{PATH} && @{$self->meta->{PATH}}) {
     $export_sh .= 'export PATH="'.join(':',@{$self->meta->{PATH}}).':$PATH"'."\n";
   }
