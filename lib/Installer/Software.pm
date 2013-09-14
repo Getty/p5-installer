@@ -30,6 +30,16 @@ has archive => (
   predicate => 1,
 );
 
+has export => (
+  is => 'ro',
+  predicate => 1,
+);
+
+has unset => (
+  is => 'ro',
+  predicate => 1,
+);
+
 for (qw( custom_configure custom_test post_install export_sh )) {
   has $_ => (
     is => 'ro',
@@ -37,7 +47,7 @@ for (qw( custom_configure custom_test post_install export_sh )) {
   );
 }
 
-for (qw( with enable disable without )) {
+for (qw( with enable disable without patch )) {
   has $_ => (
     is => 'ro',
     predicate => 1,
@@ -113,6 +123,14 @@ sub unpack {
   }
   my $src_path = dir($archive->extract_path)->absolute->stringify;
   $self->log_print("Extracted to ".$src_path." ...");
+  if ($self->has_patch) {
+    my @patches = ref $self->patch eq 'ARRAY'
+      ? @{$self->patch}
+      : $self->patch;
+    for (@patches) {
+      $self->target->patch_via_url($self->target->src_dir,$_,'-p0');
+    }
+  }
   $self->meta->{unpack} = $src_path;
 }
 sub unpack_path { dir(shift->meta->{unpack},@_) }

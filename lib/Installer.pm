@@ -4,15 +4,21 @@ package Installer;
 use strict;
 use warnings;
 use Installer::Target;
+use Cwd;
 
 our @functions = qw(
 
   run
+  export
+  unset
   url
   file
   perl
   cpanm
   pip
+  perldeps
+  dzildeps
+  postgres
 
 );
 
@@ -21,10 +27,13 @@ sub import {
   {
     no strict 'refs';
     *{"$pkg\::install_to"} = sub {
-      my ( $target_directory, $installer_code ) = @_;
+      my ( $target_directory, $installer_code, $source_directory ) = @_;
       my $installer_target = Installer::Target->new(
         target_directory => $target_directory,
         installer_code => $installer_code,
+        source_directory => defined $source_directory
+          ? $source_directory
+          : getcwd(),
       );
       $installer_target->installation;
     };

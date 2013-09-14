@@ -25,11 +25,22 @@ has installer_code => (
   required => 1,
 );
 
+has source_directory => (
+  is => 'ro',
+  predicate => 1,
+);
+has source => (
+  is => 'ro',
+  lazy => 1,
+  default => sub { dir($_[0]->source_directory)->absolute },
+);
+sub source_path { dir(shift->source,@_) }
+sub source_file { file(shift->source,@_) }
+
 has target_directory => (
   is => 'ro',
   required => 1,
 );
-
 has target => (
   is => 'ro',
   lazy => 1,
@@ -91,11 +102,27 @@ sub install_software {
   $self->meta->{software_packages_done} = [keys %{$self->software}];
   push @{$self->actions}, $software;
   $self->update_env;
+  use Data::Dumper; print Dumper($software->meta);
+  if (!defined $software->meta->{installed_export} && $software->has_export) {
+    $self->install_export(ref $software->export eq 'ARRAY'
+      ? @{$software->export}
+      : $software->export
+    );
+    $software->meta->{installed_export} = 1;
+  }
+  if (!defined $software->meta->{installed_unset} && $software->has_unset) {
+    $self->install_unset(ref $software->unset eq 'ARRAY'
+      ? @{$software->unset}
+      : $software->unset
+    );
+    $software->meta->{installed_unset} = 1;
+  }
   $self->write_export;
   if (!defined $software->meta->{post_install} && $software->has_post_install) {
     $software->post_install->($software);
     $software->meta->{post_install} = 1;
   }
+  $self->write_export;
 }
 
 sub install_url {
@@ -142,7 +169,95 @@ sub install_perl {
     },
     export_sh => sub {
       my ( $self ) = @_;
-      return 'eval $( perl -I'.$self->target_path('perl5','lib','perl5').' -Mlocal::lib='.$self->target_path('perl5').' )';
+      'eval $( perl -I'.$self->target_path('perl5','lib','perl5').' -Mlocal::lib=--deactivate-all )',
+      'eval $( perl -I'.$self->target_path('perl5','lib','perl5').' -Mlocal::lib='.$self->target_path('perl5').' )'
+    },
+    %args,
+  ));
+}
+
+#url "http://ftp.postgresql.org/pub/source/v9.3.0/postgresql-9.3.0.tar.bz2", with => {
+#  pgport => 15700,
+#};
+sub install_postgres {
+  my ( $self, $version, %args ) = @_;
+  my $url = "http://ftp.postgresql.org/pub/source/v".$version."/postgresql-".$version.".tar.bz2";
+  my %with = defined $args{with}
+    ? %{delete $args{with}}
+    : ();
+  $with{pgport} = delete $args{port} if defined $args{port};
+  my %users = defined $args{users}
+    ? %{delete $args{users}}
+    : ();
+  my $pgdata = defined $args{data}
+    ? dir(delete $args{data})->absolute->stringify
+    : $self->target_path('pgdata')->absolute->stringify;
+  my $logfile = defined $args{log}
+    ? dir(delete $args{log})->absolute->stringify
+    : $self->target_file('pgdata','postgresql.log');
+  if (defined $args{superuser_with_db}) {
+    my $superuser_with_db = delete $args{superuser_with_db};
+    if (ref $superuser_with_db eq 'HASH') {
+      for (keys $superuser_with_db) {
+        $users{$_} = {
+          superuser => 1,
+          dbs => [
+            ref $superuser_with_db->{$_} eq 'ARRAY'
+              ? @{$superuser_with_db->{$_}}
+              : $superuser_with_db->{$_}
+          ],
+        };
+      }
+    } elsif (ref $superuser_with_db eq 'ARRAY') {
+      for (@{$superuser_with_db}) {
+        $users{$_} = {
+          superuser => 1,
+          dbs => [$_],
+        };
+      }
+    } elsif (ref $superuser_with_db eq '') {
+      $users{$superuser_with_db} = {
+        superuser => 1,
+        dbs => [$superuser_with_db],
+      };
+    } else {
+      die "unknown how to handle ".(ref $superuser_with_db);
+    }
+  }
+  my $post_install = delete $args{post_install};
+  $self->install_software(Installer::Software->new(
+    target => $self,
+    archive_url => $url,
+    %with ? ( with => \%with ) : (),
+    export => [
+      'PGDATA='.$pgdata,
+      defined $with{pgport} ? ('PGPORT='.$with{pgport}, 'PGHOST=localhost') : (),
+      defined $args{export} ? ( delete $args{export} ) : (),
+    ],
+    post_install => sub {
+      my @post_install_args = @_;
+
+      $_[0]->run(undef,'initdb');
+      $_[0]->run(undef,'pg_ctl','-w','-l',$logfile,'start');
+
+      for my $user (keys %users) {
+        my @create_args = '-w';
+        if ($users{$user}->{superuser}) {
+          push @create_args, '-s';
+        }
+        $_[0]->run(undef,'createuser',@create_args,$user);
+        if (defined $users{$user}->{dbs}) {
+          for (@{$users{$user}->{dbs}}) {
+            $_[0]->run(undef,'createdb','-O',$user,$_);
+          }
+        }
+      }
+
+      if (defined $post_install) {
+        $post_install->(@post_install_args);
+      }
+
+      $_[0]->run(undef,'pg_ctl','stop');
     },
     %args,
   ));
@@ -168,6 +283,99 @@ sub install_run {
   };
 }
 
+sub install_perldeps {
+  my ( $self, $path, @args ) = @_;
+  die "No source_directory or path given" unless defined $path || $self->has_source_directory;
+  $self->run(undef,"cpanm","--installdeps",defined $path ? $path : $self->source_directory);
+  $self->run(undef,"set");
+}
+
+sub install_dzildeps {
+  my ( $self, $path, @args ) = @_;
+  die "No source_directory or path given" unless defined $path || $self->has_source_directory;
+  $self->run(undef,"cpanm","Dist::Zilla");
+  my $dzil_dir = defined $path ? $path : $self->source_directory;
+  $self->run($dzil_dir,qw( dzil authordeps | grep -v " " | cpanm ));
+  $self->run($dzil_dir,qw( dzil listdeps | grep -v " " | cpanm ));
+}
+
+sub install_export {
+  my ( $self, @args ) = @_;
+  my @exports = defined $self->meta->{export}
+    ? @{$self->meta->{export}}
+    : ();
+  use DDP; p(@args); p(@exports);
+  for (@args) {
+    my @new_exports;
+    if (ref $_ eq 'CODE') {
+      push @new_exports, $_->($self);
+    } else {
+      push @new_exports, $_;
+    }
+    for (@new_exports) {
+      $self->log_print("Adding export ".$_);
+      push @exports, $_;
+    }
+  }
+  $self->meta->{export} = \@exports;
+  $self->write_export;
+}
+
+sub install_unset {
+  my ( $self, @args ) = @_;
+  my @unsets = defined $self->meta->{unset}
+    ? @{$self->meta->{unset}}
+    : ();
+  for (@args) {
+    my @new_unsets;
+    if (ref $_ eq 'CODE') {
+      push @new_unsets, $_->($self);
+    } else {
+      push @new_unsets, $_;
+    }
+    for (@new_unsets) {
+      $self->log_print("Adding export ".$_);
+      push @unsets, $_;
+    }
+  }
+  $self->meta->{unset} = \@unsets;
+  $self->write_export;
+}
+
+sub patch_via_url {
+  my ( $self, $path, $url, @args ) = @_;
+  local $CWD = $path;
+  $self->log_print("Fetching patch from $url into ".$path." ...");
+  my $diff_name = $url;
+  $diff_name =~ s/^https{0,1}//g;
+  $diff_name =~ s/[^\w]+/_/g;
+  $diff_name =~ s/^_+//g;
+  $diff_name =~ s/_+$//g;
+  $diff_name .= '.patch';
+  io(file($path,$diff_name))->print(io($url)->get->content);
+  $self->log_print("Applying patch as ".$diff_name." ...");
+  $|=1;
+  my $patch_log = "";
+  my $pid = IPC::Open3::open3(my ( $in, $out ), undef, "patch",@args);
+  print $in scalar io($diff_name)->slurp;
+  close ($in);
+  while(defined(my $line = <$out>)){
+    $patch_log .= $line;
+    chomp($line);
+    $self->log($line);
+  }
+  waitpid($pid, 0);
+  my $status = $? >> 8;
+  if ($status) {
+    print $patch_log;
+    print "\n";
+    print "     Command: patch ".join(" ",@args)."\n";
+    print "in Directory: ".$path."\n\n";
+    print "exited with status $status\n\n";
+    die "Error on run ".$self->log_filename;
+  }
+}
+
 sub run {
   my ( $self, $dir, @args ) = @_;
   $dir = $self->target_path unless $dir;
@@ -176,17 +384,20 @@ sub run {
   $|=1;
   my $run_log = "";
   my $export_sh_filename = $self->target_file('export.sh')->absolute->stringify;
+  my $prefix = "";
   if (-f $export_sh_filename) {
     my @export_sh_lines = io($export_sh_filename)->slurp;
     for my $line (@export_sh_lines) {
       $run_log .= $line;
+      $prefix .= $line;
       chomp($line);
       $self->log($line);
     }
-    unshift @args, ".", $export_sh_filename, "\n";
+    $prefix .= "\n# Command ".("#" x 50)."\n";
   }
+  my $shell_script = $prefix.join(" ",@args)."";
   my $pid = IPC::Open3::open3(my ( $in, $out ), undef, "/bin/sh -s");
-  print $in join(" ",@args)."";
+  print $in $shell_script;
   close ($in);
   while(defined(my $line = <$out>)){
     $run_log .= $line;
@@ -198,8 +409,9 @@ sub run {
   if ($status) {
     print $run_log;
     print "\n";
-    print "     Command: ".join(" ",@args)."\n";
-    print "in Directory: ".$dir."\n";
+    print " Command:\n";
+    print "\n".join(" ",@args)."\n\n";
+    print " in Directory: ".$dir."\n";
     print "exited with status $status\n\n";
     print "\n";
     die "Error on run ".$self->log_filename;
@@ -239,7 +451,7 @@ sub prepare_installation {
 
 sub finish_installation {
   my ( $self ) = @_;
-  $self->log_print("Done");
+  $self->log_print("Done ".$self->log_filename);
   %ENV = %{$self->meta->{preinstall_ENV}};
   delete $self->meta->{preinstall_ENV};
   $current = undef;
@@ -258,11 +470,29 @@ sub write_export {
   $self->log_print("Generating ".$export_filename." ...");
   my $export_sh = "#!/bin/sh\n#\n# Installer auto generated export.sh\n#\n".("#" x 60)."\n\n";
   $export_sh .= 'export CURRENT_INSTALLER_ENV='.$self->target_path->stringify."\n";
+  if (defined $self->meta->{unset} && @{$self->meta->{unset}}) {
+    $export_sh .= '# custom unsets'."\n";
+    for (@{$self->meta->{unset}}) {
+      $export_sh .= 'unset '.$_."\n";
+    }
+  }
   if (defined $self->meta->{PATH} && @{$self->meta->{PATH}}) {
     $export_sh .= 'export PATH="'.join(':',@{$self->meta->{PATH}}).':$PATH"'."\n";
   }
   if (defined $self->meta->{LD_LIBRARY_PATH} && @{$self->meta->{LD_LIBRARY_PATH}}) {
     $export_sh .= 'export LD_LIBRARY_PATH="'.join(':',@{$self->meta->{LD_LIBRARY_PATH}}).':$LD_LIBRARY_PATH"'."\n";
+  }
+  if (defined $self->meta->{C_INCLUDE_PATH} && @{$self->meta->{C_INCLUDE_PATH}}) {
+    $export_sh .= 'export C_INCLUDE_PATH="'.join(':',@{$self->meta->{C_INCLUDE_PATH}}).':$C_INCLUDE_PATH"'."\n";
+  }
+  if (defined $self->meta->{MANPATH} && @{$self->meta->{MANPATH}}) {
+    $export_sh .= 'export MANPATH="'.join(':',@{$self->meta->{MANPATH}}).':$MANPATH"'."\n";
+  }
+  if (defined $self->meta->{export} && @{$self->meta->{export}}) {
+    $export_sh .= '# custom exports'."\n";
+    for (@{$self->meta->{export}}) {
+      $export_sh .= 'export '.$_."\n";
+    }
   }
   $export_sh .= "\n";
   for (@{$self->meta->{software_packages_done}}) {
@@ -290,8 +520,16 @@ sub update_env {
     my $bindir = $self->target_path('bin')->absolute->stringify;
     push @bindirs, $bindir;
     $self->meta->{PATH} = \@bindirs;
-    $ENV{PATH} = $bindir.':'.$ENV{PATH};
     $seen{'bin'} = 1;
+  }
+  if (!$seen{'man'} and -e $self->target_path('man')) {
+    my @mandirs = defined $self->meta->{MANPATH}
+      ? @{$self->meta->{MANPATH}}
+      : ();
+    my $mandir = $self->target_path('man')->absolute->stringify;
+    push @mandirs, $mandir;
+    $self->meta->{MANPATH} = \@mandirs;
+    $seen{'man'} = 1;
   }
   if (!$seen{'lib'} and -e $self->target_path('lib')) {
     my @libdirs = defined $self->meta->{LD_LIBRARY_PATH}
@@ -300,8 +538,16 @@ sub update_env {
     my $libdir = $self->target_path('lib')->absolute->stringify;
     push @libdirs, $libdir;
     $self->meta->{LD_LIBRARY_PATH} = \@libdirs;
-    $ENV{LD_LIBRARY_PATH} = $libdir.(defined $ENV{LD_LIBRARY_PATH} ? ':'.$ENV{LD_LIBRARY_PATH} : '');
     $seen{'lib'} = 1;
+  }
+  if (!$seen{'include'} and -e $self->target_path('include')) {
+    my @libdirs = defined $self->meta->{C_INCLUDE_PATH}
+      ? @{$self->meta->{C_INCLUDE_PATH}}
+      : ();
+    my $libdir = $self->target_path('include')->absolute->stringify;
+    push @libdirs, $libdir;
+    $self->meta->{C_INCLUDE_PATH} = \@libdirs;
+    $seen{'include'} = 1;
   }
   $self->meta->{seen_dirs} = \%seen;
 }

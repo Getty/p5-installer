@@ -107,6 +107,10 @@ Install specific perl (so far no options):
 
   perl "5.8.8";
 
+Install specific postgresql (with all required step to have it all setup):
+
+  postgres "9.3.0", port => 15432, superuser_with_db => 'myapp';
+
 Or install packages via cpanm:
 
   cpanm qw( Yeb Dist::Zilla );
