@@ -197,7 +197,7 @@ sub install_postgres {
   if (defined $args{superuser_with_db}) {
     my $superuser_with_db = delete $args{superuser_with_db};
     if (ref $superuser_with_db eq 'HASH') {
-      for (keys $superuser_with_db) {
+      for (keys %{$superuser_with_db}) {
         $users{$_} = {
           superuser => 1,
           dbs => [
