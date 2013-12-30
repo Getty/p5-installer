@@ -102,7 +102,6 @@ sub install_software {
   $self->meta->{software_packages_done} = [keys %{$self->software}];
   push @{$self->actions}, $software;
   $self->update_env;
-  use Data::Dumper; print Dumper($software->meta);
   if (!defined $software->meta->{installed_export} && $software->has_export) {
     $self->install_export(ref $software->export eq 'ARRAY'
       ? @{$software->export}
@@ -304,7 +303,6 @@ sub install_export {
   my @exports = defined $self->meta->{export}
     ? @{$self->meta->{export}}
     : ();
-  use DDP; p(@args); p(@exports);
   for (@args) {
     my @new_exports;
     if (ref $_ eq 'CODE') {
@@ -553,3 +551,26 @@ sub update_env {
 }
 
 1;
+
+=head1 DESCRIPTION
+
+You should use this through the command L<installto>.
+
+B<TOTALLY BETA, PLEASE TEST :D>
+
+=head1 SUPPORT
+
+IRC
+
+  Join #cindustries on irc.quakenet.org. Highlight Getty for fast reaction :).
+
+Repository
+
+  http://github.com/Getty/p5-installer
+  Pull request and additional contributors are welcome
+ 
+Issue Tracker
+
+  http://github.com/Getty/p5-installer/issues
+
+=cut

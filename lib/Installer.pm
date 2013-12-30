@@ -105,8 +105,23 @@ Or in class usage (not suggested):
 
 =head1 DESCRIPTION
 
-See L<installer> for more information.
+You should use this through the command L<installto>.
 
 B<TOTALLY BETA, PLEASE TEST :D>
+
+=head1 SUPPORT
+
+IRC
+
+  Join #cindustries on irc.quakenet.org. Highlight Getty for fast reaction :).
+
+Repository
+
+  http://github.com/Getty/p5-installer
+  Pull request and additional contributors are welcome
+ 
+Issue Tracker
+
+  http://github.com/Getty/p5-installer/issues
 
 =cut

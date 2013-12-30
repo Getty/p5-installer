@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # PODNAME: installto
-# ABSTRACT: Install an .installer configuration file
+# ABSTRACT: Install an 'installer' configuration file
 
 use strict;
 use warnings;
@@ -29,12 +29,14 @@ App::Installer->new(
   defined $installer_code ? ( installer_code => $installer_code ) : (),
 )->install_to_target;
 
+# TODO ####
+# # Directly usable without install via http://installer.pm
+# curl -s -L http://installer.pm | perl - ~/myprojectenv
+# TODO ####
+
 =head1 SYNOPSIS
 
-  # Directly usable without install via http://installer.pm
-  curl -s -L http://installer.pm | perl - ~/myprojectenv
-
-  # Will use .installer file in current directory
+  # Will use installer file in current directory
   installto ~/myprojectenv
 
   # Using a specific installer file
@@ -63,6 +65,11 @@ Sample .installer file might look like
 =head1 DESCRIPTION
 
 B<TOTALLY BETA, PLEASE TEST :D>
+
+This software is made for taking away the annoying task of installing a common
+specific bundle of requirements to a target directory. In the target directory
+B<installto> will generate a B<export.sh> which can be used to get all the
+environment loaded to use the installed programs.
 
 Bigger example for installer file options:
 
@@ -117,7 +124,7 @@ Or install packages via cpanm:
 
 B<Be careful!> It doesn't care if you have installed a perl in the target
 directory or not, and just fire up cpanm, so it would install on your local
-perl installation, if you don't install perl before.
+perl installation, if you didn't installed perl before.
 
 Or install packages via pip:
 
@@ -125,4 +132,39 @@ Or install packages via pip:
 
 B<Be careful!> It doesn't care if you have installed pip in the target
 directory or not, and just fire up pip, so it would install on your local
-python environment, if you don't installed pip before.
+python environment, if you didn't installed pip before.
+
+=head1 DEBUGGING
+
+B<installto> normally prints out the logfile of the output of the last
+procedure that fails. This allows easy fixing of those problems. You can
+then, after tuning the situation, restart the script and it retries the last
+comment (this might still a bit buggy, be warned).
+
+In the case of a download problem or any other big problem that requires you
+to restart the specific step (like when you changed the URL to get a
+different version), you might want to delete fitting B<.json> file in the
+B<installer> directory, created in your target directory, this will force
+installto to redownload the file and restart this step complete over.
+
+=head1 WARNING
+
+The generation of the B<export.sh> still has some problem, you might need to
+adapt it by hand (for now).
+
+=head1 SUPPORT
+
+IRC
+
+  Join #cindustries on irc.quakenet.org. Highlight Getty for fast reaction :).
+
+Repository
+
+  http://github.com/Getty/p5-installer
+  Pull request and additional contributors are welcome
+ 
+Issue Tracker
+
+  http://github.com/Getty/p5-installer/issues
+
+=cut
