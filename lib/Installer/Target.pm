@@ -145,6 +145,7 @@ sub install_file {
 sub install_perl {
   my ( $self, $perl_version, %args ) = @_;
   my $hashref = perl_tarballs($perl_version);
+  die 'No such Perl version: '.$perl_version unless defined $hashref;
   my $src = 'http://www.cpan.org/authors/id/'.$hashref->{'tar.gz'};
   $self->install_software(Installer::Software->new(
     target => $self,
