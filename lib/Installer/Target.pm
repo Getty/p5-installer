@@ -145,6 +145,7 @@ sub install_file {
 sub install_perl {
   my ( $self, $perl_version, %args ) = @_;
   my $hashref = perl_tarballs($perl_version);
+  die 'No such Perl version: '.$perl_version unless defined $hashref;
   my $src = 'http://www.cpan.org/authors/id/'.$hashref->{'tar.gz'};
   $self->install_software(Installer::Software->new(
     target => $self,
@@ -475,16 +476,16 @@ sub write_export {
     }
   }
   if (defined $self->meta->{PATH} && @{$self->meta->{PATH}}) {
-    $export_sh .= 'export PATH="'.join(':',@{$self->meta->{PATH}}).':$PATH"'."\n";
+    $export_sh .= 'export PATH="'.join(':',@{$self->meta->{PATH}}).'${PATH+:}$PATH"'."\n";
   }
   if (defined $self->meta->{LD_LIBRARY_PATH} && @{$self->meta->{LD_LIBRARY_PATH}}) {
-    $export_sh .= 'export LD_LIBRARY_PATH="'.join(':',@{$self->meta->{LD_LIBRARY_PATH}}).':$LD_LIBRARY_PATH"'."\n";
+    $export_sh .= 'export LD_LIBRARY_PATH="'.join(':',@{$self->meta->{LD_LIBRARY_PATH}}).'${LD_LIBRARY_PATH+:}$LD_LIBRARY_PATH"'."\n";
   }
   if (defined $self->meta->{C_INCLUDE_PATH} && @{$self->meta->{C_INCLUDE_PATH}}) {
-    $export_sh .= 'export C_INCLUDE_PATH="'.join(':',@{$self->meta->{C_INCLUDE_PATH}}).':$C_INCLUDE_PATH"'."\n";
+    $export_sh .= 'export C_INCLUDE_PATH="'.join(':',@{$self->meta->{C_INCLUDE_PATH}}).'${C_INCLUDE_PATH+:}$C_INCLUDE_PATH"'."\n";
   }
   if (defined $self->meta->{MANPATH} && @{$self->meta->{MANPATH}}) {
-    $export_sh .= 'export MANPATH="'.join(':',@{$self->meta->{MANPATH}}).':$MANPATH"'."\n";
+    $export_sh .= 'export MANPATH="'.join(':',@{$self->meta->{MANPATH}}).'${MANPATH+:}$MANPATH"'."\n";
   }
   if (defined $self->meta->{export} && @{$self->meta->{export}}) {
     $export_sh .= '# custom exports'."\n";
