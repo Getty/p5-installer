@@ -8,6 +8,7 @@ use Installer::Software;
 use JSON_File;
 use File::chdir;
 use CPAN::Perl::Releases qw[perl_tarballs];
+use Installer::cpanm;
 use CPAN;
 use Path::Class;
 use namespace::clean;
@@ -72,6 +73,8 @@ has src_dir => (
   lazy => 1,
   default => sub { dir($_[0]->target,'src') },
 );
+sub src_path { dir(shift->src_dir,@_) }
+sub src_file { file(shift->src_dir,@_) }
 
 has log_filename => (
   is => 'ro',
@@ -133,6 +136,27 @@ sub install_url {
   ));
 }
 
+sub install_git {
+  my ( $self, $git, %args ) = @_;
+  $self->install_software(Installer::Software->new(
+    target => $self,
+    git_url => $git,
+    %args,
+  ));
+}
+
+sub install_copy {
+  my ( $self, $source, @target_path ) = @_;
+  $self->log_print("Copy ".$source." to ".(join('/',@target_path))."...");
+  io($self->target_path(@target_path))->print(io($source)->get->content);
+}
+
+sub install_text {
+  my ( $self, $text, @target_path ) = @_;
+  $self->log_print("Generating textfile at ".(join('/',@target_path))."...");
+  io($self->target_path(@target_path))->print($text);
+}
+
 sub install_file {
   my ( $self, $file, %args ) = @_;
   $self->install_software(Installer::Software->new(
@@ -159,7 +183,7 @@ sub install_perl {
       my ( $self ) = @_;
       $self->log_print("Installing App::cpanminus ...");
       my $cpanm_filename = file($self->target->installer_dir,'cpanm');
-      io($cpanm_filename)->print(io('http://cpanmin.us/')->get->content);
+      Installer::cpanm::install_to($cpanm_filename);
       chmod(0755,$cpanm_filename);
       $self->run(undef,$cpanm_filename,'-L',$self->target_path('perl5'),qw(
         App::cpanminus
@@ -228,6 +252,7 @@ sub install_postgres {
   $self->install_software(Installer::Software->new(
     target => $self,
     archive_url => $url,
+    ignore_makefile_on_configure => 1,
     %with ? ( with => \%with ) : (),
     export => [
       'PGDATA='.$pgdata,
@@ -261,6 +286,11 @@ sub install_postgres {
     },
     %args,
   ));
+}
+
+sub install_debian {
+  my ( $self, @modules ) = @_;
+  $self->run(undef,'sudo','apt-get','install','-y',@modules);
 }
 
 sub install_cpanm {
@@ -487,6 +517,15 @@ sub write_export {
   if (defined $self->meta->{MANPATH} && @{$self->meta->{MANPATH}}) {
     $export_sh .= 'export MANPATH="'.join(':',@{$self->meta->{MANPATH}}).'${MANPATH+:}$MANPATH"'."\n";
   }
+  if (defined $self->meta->{PKG_CONFIG_PATH} && @{$self->meta->{PKG_CONFIG_PATH}}) {
+    $export_sh .= 'export PKG_CONFIG_PATH="'.join(':',@{$self->meta->{PKG_CONFIG_PATH}}).'${PKG_CONFIG_PATH+:}$PKG_CONFIG_PATH"'."\n";
+  }
+  if (defined $self->meta->{ACLOCAL_PATH}) {
+    $export_sh .= 'export ACLOCAL_PATH="'.$self->meta->{ACLOCAL_PATH}.'"'."\n";
+  }
+  if (defined $self->meta->{ACLOCAL}) {
+    $export_sh .= 'export ACLOCAL="'.$self->meta->{ACLOCAL}.'"'."\n";
+  }
   if (defined $self->meta->{export} && @{$self->meta->{export}}) {
     $export_sh .= '# custom exports'."\n";
     for (@{$self->meta->{export}}) {
@@ -521,6 +560,18 @@ sub update_env {
     $self->meta->{PATH} = \@bindirs;
     $seen{'bin'} = 1;
   }
+  for my $p (qw( lib share )) {
+    my $path = $self->target_path($p,'pkgconfig');
+    my $skey = $p.'pkgconfig';
+    if (!$seen{$skey} and -e $path) {
+      my @pcp = defined $self->meta->{PKG_CONFIG_PATH}
+        ? @{$self->meta->{PKG_CONFIG_PATH}}
+        : ();
+      push @pcp, $path->absolute->stringify;
+      $self->meta->{PKG_CONFIG_PATH} = \@pcp;
+      $seen{$skey} = 1;
+    }
+  }
   if (!$seen{'man'} and -e $self->target_path('man')) {
     my @mandirs = defined $self->meta->{MANPATH}
       ? @{$self->meta->{MANPATH}}
@@ -529,6 +580,11 @@ sub update_env {
     push @mandirs, $mandir;
     $self->meta->{MANPATH} = \@mandirs;
     $seen{'man'} = 1;
+  }
+  if (!$seen{'aclocal'} and -e $self->target_path('share','aclocal')) {
+    $self->meta->{ACLOCAL_PATH} = $self->target_path('share','aclocal')->stringify;
+    $self->meta->{ACLOCAL} = 'aclocal -I '.$self->meta->{ACLOCAL_PATH};
+    $seen{'aclocal'} = 1;
   }
   if (!$seen{'lib'} and -e $self->target_path('lib')) {
     my @libdirs = defined $self->meta->{LD_LIBRARY_PATH}

@@ -9,13 +9,18 @@ use Cwd;
 our @functions = qw(
 
   run
+  copy
+  txt
+
   export
   unset
   url
   file
+  git
   perl
   cpanm
   pip
+  debian
   perldeps
   dzildeps
   postgres
@@ -36,6 +41,12 @@ sub import {
           : getcwd(),
       );
       $installer_target->installation;
+    };
+    *{"$pkg\::target"} = sub {
+      $Installer::Target::current;
+    };
+    *{"$pkg\::target_path"} = sub {
+      $Installer::Target::current->target_path(@_);
     };
   }
   for my $command (@functions) {

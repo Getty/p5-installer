@@ -84,9 +84,13 @@ Bigger example for installer file options:
     testable => 1;
 
 Would endup with the following parameter on I<./configure>: B<--with-key=value
---with-other_key --enable-satan --disable-god --without-religion>. Also it
-would run "make test" if there is a Makefile after configuration. Another
-options possible (so far):
+--with-other_key --enable-satan --disable-god --without-religion>.
+
+You can give HashRef or ArrayRef at B<enable>, B<disable>, B<with> and
+B<without> to achieve whatever configure setup you need.
+
+Also it would run "make test" if there is a Makefile after configuration.
+Another options possible (so far):
 
   url "http://host/file.tar.gz",
     custom_test => sub {

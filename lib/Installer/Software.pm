@@ -25,6 +25,11 @@ has archive_url => (
   predicate => 1,
 );
 
+has git_url => (
+  is => 'ro',
+  predicate => 1,
+);
+
 has archive => (
   is => 'ro',
   predicate => 1,
@@ -40,6 +45,16 @@ has unset => (
   predicate => 1,
 );
 
+has ignore_makefile_on_configure => (
+  is => 'lazy',
+  default => sub {}
+);
+
+has onlyunpack => (
+  is => 'lazy',
+  default => sub {}
+);
+
 for (qw( custom_configure custom_test post_install export_sh )) {
   has $_ => (
     is => 'ro',
@@ -47,7 +62,7 @@ for (qw( custom_configure custom_test post_install export_sh )) {
   );
 }
 
-for (qw( with enable disable without patch )) {
+for (qw( with enable disable without patch extra_args )) {
   has $_ => (
     is => 'ro',
     predicate => 1,
@@ -59,7 +74,11 @@ has alias => (
   lazy => 1,
   default => sub {
     my ( $self ) = @_;
-    if ($self->has_archive_url) {
+    if ($self->has_git_url) {
+      my $alias = $self->git_url;
+      $alias =~ s/[^\w]+/-/g;
+      return $alias;
+    } elsif ($self->has_archive_url) {
       return (split('-',(split('/',io($self->archive_url)->uri->path))[-1]))[0];
     } elsif ($self->has_archive) {
       return (split('-',(split('/',$self->archive))[-1]))[0];
@@ -97,7 +116,15 @@ sub installation {
 sub fetch {
   my ( $self ) = @_;
   return if defined $self->meta->{fetch};
-  if ($self->has_archive_url) {
+  if ($self->has_git_url) {
+    my $target_dir = $self->target->src_path($self->alias);
+    unless (-d $target_dir) {
+      $self->log_print("Git clone ".$self->git_url." at ".$self->alias." ...");
+      $self->run($self->target->src_path,qw( git clone ),$self->git_url,$target_dir);
+    }
+    $self->meta->{fetch} = $target_dir->stringify;
+    $self->meta->{unpack} = $target_dir->stringify;
+  } elsif ($self->has_archive_url) {
     my $sio = io($self->archive_url);
     my $filename = (split('/',$sio->uri->path))[-1];
     $self->log_print("Downloading ".$self->archive_url." as ".$filename." ...");
@@ -107,7 +134,7 @@ sub fetch {
   } elsif ($self->has_archive) {
     $self->meta->{fetch} = file($self->archive)->absolute->stringify;
   }
-  die "Unable to get an archive for unpacking for this software" unless defined $self->meta->{fetch};
+  die "Unable to get an archive for unpacking for this software" unless exists $self->meta->{fetch};
 }
 sub fetch_path { file(shift->meta->{fetch}) }
 
@@ -136,27 +163,34 @@ sub unpack {
 sub unpack_path { dir(shift->meta->{unpack},@_) }
 sub unpack_file { file(shift->meta->{unpack},@_) }
 
-sub run_configure {
-  my ( $self, @configure_args ) = @_;
-  if ($self->has_with) {
-    for my $key (keys %{$self->with}) {
-      my $value = $self->with->{$key};
-      if (defined $value && $value ne "") {
-        push @configure_args, '--with-'.$key.'='.$value;
-      } else {
-        push @configure_args, '--with-'.$key;
-      }
-    }
-  }
-  for my $func (qw( enable disable without )) {
+sub run_common_args {
+  my ( $self, $command, @common_args ) = @_;
+  unshift @common_args, '--prefix='.$self->target_directory;
+  for my $func (qw( with enable disable without )) {
     my $has_func = 'has_'.$func;
     if ($self->$has_func) {
-      for my $value (@{$self->$func}) {
-        push @configure_args, '--'.$func.'-'.$value;
+      my $value = $self->$func;
+      my $ref = ref $value;
+      if ($ref eq 'ARRAY') {
+        for my $value (@{$self->$func}) {
+          push @common_args, '--'.$func.'-'.$value;
+        }        
+      } else {
+        for my $key (keys %{$self->with}) {
+          my $value = $self->with->{$key};
+          if (defined $value && $value ne "") {
+            push @common_args, '--'.$func.'-'.$key.'='.$value;
+          } else {
+            push @common_args, '--'.$func.'-'.$key;
+          }
+        }        
       }
     }
   }
-  $self->run($self->unpack_path,'./configure','--prefix='.$self->target_directory,@configure_args);
+  if ($self->has_extra_args) {
+    push @common_args, @{$self->extra_args};
+  }
+  $self->run($self->unpack_path,$command,@common_args);
 }
 
 sub configure {
@@ -167,13 +201,13 @@ sub configure {
     $self->custom_configure->($self);
   } else {
     if (-f $self->unpack_file('autogen.sh')) {
-      $self->run($self->unpack_path,'./autogen.sh');
+      $self->run_common_args('./autogen.sh');
     }
-    if (-f $self->unpack_file('configure')) {
-      $self->run_configure;
+    if (($self->ignore_makefile_on_configure || !-f $self->unpack_file('Makefile')) && -f $self->unpack_file('configure')) {
+      $self->run_common_args('./configure');
     } elsif (-f $self->unpack_path('setup.py')) {
       # no configure
-    } elsif ($self->unpack_file('Makefile.PL')) {
+    } elsif (-f $self->unpack_file('Makefile.PL')) {
       $self->run($self->unpack_path,'perl','Makefile.PL');
     }
   }
